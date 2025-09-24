@@ -1,0 +1,127 @@
+---
+title: "cleto_quihue_grupo_05"
+author: "CLETO EDWIN QUIHUE HUYHUA"
+format: html
+---
+
+# A. Importación de datos
+
+```{r}
+# Cargar librerías necesarias
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(survival)
+
+# Importar dataset
+datos <- read_csv("cirrosis.csv")
+
+# Ver estructura inicial
+dim(datos)
+names(datos)
+head(datos)
+```
+
+# B. Limpieza y transformación
+
+```{r}
+# Paso 1: estandarizar nombres de columnas
+datos <- datos %>% rename_with(tolower)
+
+# Paso 2: revisar datos
+str(datos)
+
+# ejemplo: convierto sexo en factor
+if("sexo" %in% names(datos)){
+  datos <- datos %>% mutate(sexo = factor(sexo))
+}
+```
+
+# C. Estadística descriptiva
+
+```{r}
+# Resumen general
+summary(datos)
+
+# Ejemplo: media y desviación estándar de bilirrubina
+datos %>% 
+  summarise(
+    media_bilirrubina = mean(bilirrubina, na.rm = TRUE),
+    mediana_bilirrubina = median(bilirrubina, na.rm = TRUE),
+    desv_bilirrubina = sd(bilirrubina, na.rm = TRUE)
+  )
+```
+
+```{r}
+# Tabla 01: Resumen descriptivo (ejemplo con algunas variables)
+library(knitr)
+
+tabla01 <- datos %>%
+  summarise(
+    n = n(),
+    edad_media = mean(edad, na.rm = TRUE),
+    albumina_media = mean(albumina, na.rm = TRUE),
+    bilirrubina_media = mean(bilirrubina, na.rm = TRUE)
+  )
+
+kable(tabla01, caption = "Tabla 01. Resumen descriptivo de la base de datos")
+```
+
+# D. Visualización de datos
+
+```{r}
+# Histograma de Bilirrubina
+ggplot(datos, aes(x = bilirrubina)) +
+  geom_histogram(bins = 20, fill = "skyblue", color = "black") +
+  theme_minimal()
+
+if("estado" %in% names(datos)){
+  ggplot(datos, aes(x = estado, y = albumina, fill = estado)) +
+    geom_boxplot() +
+    theme_minimal()
+}
+```
+
+# E. Pruebas inferenciales
+
+```{r}
+# Revisar categorías en estado
+unique(datos$estado)
+table(datos$estado)
+
+# Si hay más de dos grupos -> ANOVA
+if(length(unique(datos$estado)) > 2){
+  anova <- aov(albumina ~ estado, data = datos)
+  summary(anova)
+} else {
+  t.test(albumina ~ estado, data = datos)
+}
+```
+
+# F. Modelo predictivo
+
+```{r}
+# Recodificar evento: fallecido = 1, otro = 0
+if("estado" %in% names(datos)){
+  datos$evento <- ifelse(trimws(tolower(datos$estado)) == "fallecido", 1, 0)
+}
+
+# Crear objeto de supervivencia con días de seguimiento
+if("dias seguimeinto (días)" %in% names(datos)){
+  surv_obj <- Surv(time = datos$`dias seguimeinto (días)`, event = datos$evento)
+  
+  # Modelo de Cox usando algunas variables clínicas
+  modelo_cox <- coxph(surv_obj ~ bilirrubina + albumina + `tiempo protrombina`, 
+                      data = datos)
+  
+  summary(modelo_cox)
+  
+  # Curvas de Kaplan-Meier según Albumina
+  fit <- survfit(surv_obj ~ (albumina > median(albumina, na.rm = TRUE)), data = datos)
+  
+  plot(fit, col = c("blue", "red"), lty = 1:2,
+       xlab = "Días de seguimiento", ylab = "Probabilidad de supervivencia")
+  legend("topright", legend = c("Albumina Alta", "Albumina Baja"),
+         col = c("blue", "red"), lty = 1:2)
+}
+```
